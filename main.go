@@ -1,10 +1,12 @@
 package main
 
 import (
-	"errors"
-	"net/http"
+	"context"
+	"log"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 type book struct {
 	ID string     `json:"id"`
@@ -12,77 +14,32 @@ type book struct {
 	Author string    `json:"author"`
 	Quantity int     `json:"quantity"`
 }
+var client *mongo.Client
+var collection *mongo.Collection
 
-var books = []book{
-	{ID: "1", Title: "In Search of Lost Time", Author: "Marcel Proust", Quantity: 2},
-	{ID: "2", Title: "The Great Gatsby", Author: "F. Scott Fitzgerald", Quantity: 5},
-	{ID: "3", Title: "War and Peace", Author: "Leo Tolstoy", Quantity: 6},
-}
-func getBooks(c *gin.Context){
-	c.IndentedJSON(http.StatusOK, books)
-}
-func bookById(c *gin.Context){
-	id := c.Param("id")
-	b, err := getBookByID(id)
-	if err != nil{
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "book not found"})
-		return
-	}
-	c.IndentedJSON(http.StatusOK, b)
-}
-func getBookByID(id string)(*book,error){
-	for i, b := range books{
-		if b.ID == id{
-			return &books[i], nil
-		}
-	}
-	return nil,errors.New("Book not found")
-}
-func createBook( c *gin.Context){
-   var newBook book
-   if err := c.BindJSON(&newBook); err != nil {
-	   return
-   }
-   books =  append(books, newBook)
-   c.IndentedJSON(http.StatusCreated, newBook)
-}
-func checkoutBook(c *gin.Context){
-	id,ok :=c.GetQuery("id")
-	if(!ok){
-		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "missing id query parameters"})
-		return
-	}
-	book, err := getBookByID(id)
-	if err != nil{
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "book not found"})
-		return
-	}
-	if(book.Quantity<=0){
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "book not available"})
-		return
-	}
-	book.Quantity--
-	c.IndentedJSON(http.StatusOK, book)
-}
-func returnBook(c *gin.Context){
-	id,ok :=c.GetQuery("id")
-	if(!ok){
-		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "missing id query parameters"})
-		return
-	}
-	book, err := getBookByID(id)
-	if err != nil{
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "book not found"})
-		return
-	}
-	book.Quantity++
-	c.IndentedJSON(http.StatusOK, book)
-}
+
+
+
 func main(){
+
+	clientOptions := options.Client().ApplyURI("db uRI")
+    client, err := mongo.Connect(context.Background(), clientOptions)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+   
+    err = client.Ping(context.Background(), nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    collection = client.Database("library").Collection("books")
 	router := gin.Default()
      router.GET("/books", getBooks)
-	 router.GET("/books/:id", bookById)
+	 router.GET("/books/:id", bookByID)
 	 router.POST("/books", createBook)
+	 router.DELETE("/remove", removeBook)
 	 router.PATCH("/checkout", checkoutBook)
 	 router.PATCH("/return", returnBook)
 	 router.Run("localhost:8080")
